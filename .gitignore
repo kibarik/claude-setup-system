@@ -1,0 +1,51 @@
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+vendor/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Entire — runtime data (config is tracked)
+.entire/tmp/
+.entire/metadata/
+.entire/logs/
+.entire/settings.local.json
+
+# Backlog — task data (config is tracked)
+.backlog/tasks/
+
+# Kittify dashboard cache
+.kittify/.dashboard
+
+# Other AI tool configs (added by Spec Kitty CLI)
+.codex/
+.opencode/
+.windsurf/
+.gemini/
+.cursor/
+.qwen/
+.kilocode/
+.augment/
+.roo/
+.amazonq/
+.github/copilot/
