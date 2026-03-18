@@ -11,6 +11,15 @@
 
 ---
 
+## ПРЕДУСЛОВИЕ: СТАТУСЫ BACKLOG
+
+Перед началом работы убедиться что все нужные статусы существуют.
+PM должен был создать их при сетапе. Если нет — сообщить PM-у до старта.
+
+Требуемые статусы: in-progress · code-review · review-debug · ready-for-testing · review-human-await
+
+---
+
 ## СТАРТОВЫЙ ПРОТОКОЛ
 
 ```
@@ -226,29 +235,33 @@ entire checkpoint "dev-verify-{TASK_ID}" 2>/dev/null || true
 
 ---
 
-## ШАГ 6: КОММИТ И СТАТУС READY-FOR-QA
+## ШАГ 6: КОММИТ И ПЕРЕДАЧА НА CODE REVIEW
 
 ```
 1. git add .
 2. git commit -m "{TASK_ID}: {краткое описание из названия задачи}
 
-   Реализовано:
-   {список ключевых изменений}
-
+   Реализовано: {список ключевых изменений}
    Подзадачи: {список sub_id}"
 
 3. git push origin {original-name}/{TASK_ID}
 
-4. Проверить что статус READY-FOR-QA существует:
-   backlog__config_get("statuses")
-   Если READY-FOR-QA нет в списке:
-     backlog__config_set("statuses",
-       [...существующие..., "ready-for-qa"])
-     echo "Статус ready-for-qa добавлен"
+4. Сохранить git diff в backlog для REVIEW-агента:
+   diff_output = Bash(git diff origin/{base-branch} -- {изменённые файлы})
+   backlog__task_update(EPIC_ID,
+     notes="[DEV-DIFF]\n{diff_output}")
 
-5. backlog__task_update(TASK_ID,
-     status="ready-for-qa",
-     notes="[DEV-LOG complete | ветка: {branch} | worktree: {WORKTREE_PATH}]")
+5. Добавить контекст для ревьюера:
+   backlog__task_update(EPIC_ID,
+     notes="[DEV-REVIEW-CONTEXT]
+     Что реализовано: {краткое описание}
+     Ключевые решения: {список [DEV-DECISION]}
+     Где смотреть в первую очередь: {файлы с основной логикой}
+     Тестовое покрытие: {описание что и как тестируется}")
+
+6. Перевести задачи в code-review:
+   backlog__task_update(TASK_ID, status="code-review",
+     notes="[DEV-LOG code-review | ветка: {branch} | worktree: {WORKTREE_PATH}]")
 ```
 
 entire checkpoint "dev-pr-{TASK_ID}" 2>/dev/null || true
@@ -257,13 +270,11 @@ entire checkpoint "dev-pr-{TASK_ID}" 2>/dev/null || true
 
 ## ШАГ 7: ОПОВЕЩЕНИЕ PM
 
-Написать PM-агенту финальный отчёт:
-
 ```
-backlog__task_update(TASK_ID, notes="""
+backlog__task_update(EPIC_ID, notes="""
 [DEV-REPORT]
-Задача: {TASK_ID} -- {название}
-Статус: READY-FOR-QA
+Эпик: {EPIC_ID}
+Статус: CODE-REVIEW
 
 Ветка: {original-name}/{TASK_ID}
 Worktree: {WORKTREE_PATH}
@@ -272,25 +283,32 @@ Worktree: {WORKTREE_PATH}
 Изменены файлы:
   {вывод git diff --stat}
 
-Подзадачи выполнены:
-  {список sub_id} -- все в статусе done
-
+Подзадачи: {список sub_id} -- все done
 Документ исследования: {research_doc_id}
-
-Checkpoints:
-  dev-start-{TASK_ID}
-  dev-branch-{TASK_ID}
-  dev-plan-{TASK_ID}
-  dev-verify-{TASK_ID}
-  dev-pr-{TASK_ID}
-
 Тесты: {результат}
-Критерии PASS: все выполнены / {список проблем}
+Критерии PASS: {все выполнены / список проблем}
 
-Готово к QA. Для проверки:
-  cd {WORKTREE_PATH}
-  git log --oneline -5
+Готово к Code Review.
+  cd {WORKTREE_PATH} && git diff origin/{base-branch} --stat
 """)
+```
+
+**После этого DEV-агент завершает работу. Дальнейшие действия инициирует REVIEW-агент.**
+
+### Если получена задача [REVIEW] со статусом review-debug
+
+DEV-агент принимает задачу [REVIEW] обратно в работу:
+
+```
+Шаг 1. backlog__task_get(REVIEW_TASK_ID) -- прочитать полный разбор
+Шаг 2. Прочитать каждый пункт из раздела "Что именно нужно исправить"
+Шаг 3. backlog__task_update(TASK_ID, status="in-progress")
+Шаг 4. Исправить каждый пункт по очереди (вернуться к ШАГ 4-5)
+Шаг 5. После исправлений -- пройти ШАГ 5 (верификация) заново
+Шаг 6. Снова выполнить ШАГ 6-7 (новый коммит, code-review, уведомить PM)
+
+ВАЖНО: не отмечать замечание исправленным пока реально не исправлено.
+ВАЖНО: написать в [DEV-REPORT] что именно исправлено по каждому пункту.
 ```
 
 ---
@@ -307,8 +325,10 @@ Checkpoints:
   + Подзадачи в Backlog с depends_on
   + Реализация через /superpowers:subagent-driven-development
   + git diff проверка после каждой подзадачи
-  + Статус READY-FOR-QA (создать если нет)
-  + [DEV-REPORT] с WORKTREE_PATH в конце
+  + Статус code-review (создать если нет)
+  + git diff сохранить в backlog для REVIEW-агента
+  + Контекст ревьюера добавить в backlog
+  + [DEV-REPORT] с WORKTREE_PATH в notes EPIC_ID
 
 ЗАПРЕЩЕНО:
   - Писать код без предварительного brainstorm

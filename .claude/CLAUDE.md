@@ -139,6 +139,7 @@ Task(
 | Статус | `backlog__task_update(id, status)` |
 | Зависимости | `backlog__task_update(id, depends_on=[...])` |
 | Лог | `backlog__task_update(id, notes=...+"[PM-LOG]")` |
+| Конфиг | `backlog__config_get("statuses")` / `backlog__config_set(...)` |
 | Создать документ | `backlog__doc_create(title, content)` |
 | Создать решение | `backlog__decision_create(title, content, status)` |
 | Список документов | `backlog__doc_list()` |
@@ -149,10 +150,12 @@ Task(
 | Переход | Условие | Действие |
 |---------|---------|----------|
 | → in-progress | агент запущен | `task_update(id, status="in-progress")` |
-| → in-review | PR открыт | `task_update(id, status="in-review")` |
+| → code-review | DEV завершил | `task_update(id, status="code-review")` |
+| → review-debug | REVIEW отклонил | `task_update(id, status="review-debug")` |
+| → review-human-await | 3+ отклонений | `task_update(id, status="review-human-await")` |
+| → ready-for-testing | REVIEW одобрил | `task_update(id, status="ready-for-testing")` |
 | → done | QA Gate пройден | `task_update(id, status="done")` |
 | → cancelled | задача не нужна | `task_update(id, status="cancelled")` |
-| → todo | баг после review | `task_update(id, status="todo")` |
 
 Нарушение условия → статус не менять, записать `[PM-LOG action:blocked | details:...]`
 
@@ -681,7 +684,33 @@ Bash(entire log --limit 5 2>/dev/null || echo "Entire недоступен")
 
 **Триггер:** человек явно подтвердил запуск.
 
-### 3.0 Проверить доступность Superpower
+### 3.0 Проверить наличие статусов в Backlog
+
+```
+Требуемые статусы для цикла разработки:
+  in-progress · code-review · review-debug · ready-for-testing · review-human-await
+
+backlog__config_get("statuses") → проверить наличие каждого
+
+Если хотя бы один отсутствует:
+  Task(
+    description="Setup: создать статусы Backlog",
+    prompt="""
+Ты -- агент-настройщик. Задача: добавить недостающие статусы в Backlog.
+
+Требуемые статусы: in-progress, code-review, review-debug, ready-for-testing, review-human-await
+
+1. backlog__config_get("statuses") -- получить текущие
+2. Для каждого отсутствующего:
+   backlog__config_set("statuses", [...текущие..., "новый-статус"])
+3. backlog__config_get("statuses") -- верифицировать
+    """,
+    subagent_type="claude-sonnet-4-5"
+  )
+  → дождаться завершения, проверить что все статусы созданы
+```
+
+### 3.0b Проверить доступность Superpower
 
 ```
 # Superpower нужен для brainstorm, using-git-worktrees, writing-plans,
@@ -760,36 +789,76 @@ CURRENT_DIR: {current_dir}
 ### 3.4 Верификация после DEV
 
 ```
-backlog__task_get(task_id) → проверить:
+backlog__task_get(epic_id) → проверить:
 
-  [ ] Статус = ready-for-qa
+  [ ] Статус задач = code-review
       Если нет → DEV не завершил работу
-      → Task(prompt=f"{developer_role}\nTASK_ID: {task_id}\nЗадача не переведена в ready-for-qa. Завершить работу по протоколу.")
+      → Task(prompt=f"{developer_role}\nTASK_ID: {task_id}\nЗадача не переведена в code-review.")
 
   [ ] notes содержит [DEV-REPORT] с WORKTREE_PATH
-      Если нет → Task(prompt="Создай [DEV-REPORT] с путём worktree")
+  [ ] notes содержит [DEV-DIFF] (git diff для ревьюера)
+  [ ] notes содержит [DEV-REVIEW-CONTEXT]
 
   [ ] Реальные изменения в коде:
       worktree_path = извлечь из [DEV-LOG branch] в notes
       Bash(cd {worktree_path} && git diff origin/main --stat)
-      Если вывод пустой → код НЕ написан, задача не готова к QA
-      → Эскалировать к человеку: "DEV обновил статус без изменений в коде"
+      Если вывод пустой → код НЕ написан → эскалировать к человеку
 
-  [ ] Документ исследования:
-      backlog__doc_list() → найти "Исследование: ... {task_id}"
-
-  [ ] Все подзадачи:
-      backlog__task_list() → подзадачи с parent={task_id} → все done?
+  [ ] Все подзадачи в done
 
 backlog__task_update(pm_dev_check_id, status="done",
-  notes="[PM-LOG verified | git-diff: {кол-во файлов} файлов | worktree: {путь}]")
+  notes="[PM-LOG verified | git-diff: {файлов} | worktree: {путь}]")
+```
+
+### 3.5 Запустить REVIEW-агента
+
+```python
+reviewer_role = Read(".claude/agents/reviewer.md")
+
+Task(
+  description="Code Review: {название эпика}",
+  prompt=f"""{reviewer_role}
+
+---
+EPIC_ID: {epic_id}
+TASK_IDs: {список task_id через запятую}
+Режим MCP: BACKLOG
+
+Первое действие: backlog__task_get({epic_id})
+Затем прочитать все TASK_IDs и провести code review.
+  """,
+  subagent_type="claude-opus-4-5"
+)
+```
+
+### 3.6 После REVIEW-агента
+
+```
+backlog__task_get(epic_id) → найти [REVIEW-REPORT] в notes
+
+Если вердикт ОДОБРИТЬ:
+  → задачи уже в ready-for-testing (REVIEW-агент сделал это сам)
+  → уведомить PM: "Code Review пройден. Задачи готовы к тестированию."
+  → PM передаёт задачи QA-агенту (Фаза 4)
+
+Если вердикт ОТКЛОНИТЬ и статус review-debug:
+  → DEV-агент видит задачи [REVIEW] в backlog и начинает итерацию
+  → PM мониторит без активных действий
+
+Если вердикт ОТКЛОНИТЬ и статус review-human-await:
+  → Найти [REVIEW-ESCALATION] в notes
+  → Сообщить человеку:
+    "Задача {epic_id} отклонена {TRY-COUNT} раз подряд.
+     Требуется ручной code review.
+     После вашего решения напишите мне -- переведу задачи в следующий цикл."
+  → Ждать явного ответа человека перед продолжением
 ```
 
 ---
 
 ## ФАЗА 4: ТЕСТИРОВАНИЕ
 
-**Триггер:** задача в `in-review`, PR открыт.
+**Триггер:** задачи в `ready-for-testing` после одобрения REVIEW-агентом.
 
 ```python
 # Извлечь PR-ссылку из DEV-LOG задачи
