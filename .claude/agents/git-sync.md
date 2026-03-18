@@ -222,21 +222,20 @@ git submodule status --recursive
 ### 4.4 Вложенные репозитории
 
 ```bash
-for nested in {пути из find в ШАГ 1}; do
+# Получить список из диагностики ШАГ 1
+NESTED_REPOS=$(find . -name ".git" -not -path "./.git"   -not -path "*/node_modules/*" -maxdepth 4 -type d 2>/dev/null)
+
+for nested in $NESTED_REPOS; do
   NESTED_DIR=$(dirname "$nested")
-  echo "=== Вложенный репо: $NESTED_DIR ==="
   cd "$NESTED_DIR"
-  # Защита entire-веток в вложенном репо
-  NESTED_CURRENT=$(git branch --show-current)
-  if echo "$NESTED_CURRENT" | grep -q "^entire/"; then
+  CURRENT=$(git branch --show-current)
+  if echo "$CURRENT" | grep -q "^entire/"; then
     DEFAULT=$(git remote show origin | grep "HEAD branch" | awk '{print $NF}')
     git checkout "$DEFAULT"
   fi
   git fetch origin
   DEFAULT=$(git remote show origin | grep "HEAD branch" | awk '{print $NF}')
-  git checkout "$DEFAULT"
-  git reset --hard "origin/$DEFAULT"
-  echo "OK: $NESTED_DIR"
+  git checkout "$DEFAULT" && git reset --hard "origin/$DEFAULT"
   cd - > /dev/null
 done
 ```
@@ -282,6 +281,8 @@ echo "=== ВЕРИФИКАЦИЯ ЗАВЕРШЕНА ==="
 ---
 
 ## ШАГ 6: ОТЧЁТ
+
+TASK_ID передаётся PM-агентом при запуске (см. prompt). Использовать его для записи отчёта.
 
 ```
 backlog__task_update(TASK_ID, status="done", notes="""

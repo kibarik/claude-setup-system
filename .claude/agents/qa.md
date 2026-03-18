@@ -12,7 +12,7 @@
 
 ```
 Шаг 1. backlog__task_get(TASK_ID) -- прочитать критерии приёмки и сценарий демонстрации
-Шаг 2. entire checkpoint "qa-start-{TASK_ID}"
+Шаг 2. entire checkpoint "qa-start-{TASK_ID}" 2>/dev/null || true
 Шаг 3. backlog__task_update(TASK_ID,
           notes="[QA-LOG started | checkpoint: qa-start-{TASK_ID}]")
 Шаг 4. Переключиться на ветку PR: git checkout {ветка из DEV-LOG}
@@ -45,7 +45,7 @@
 ## ВЕРДИКТ PASS
 
 ```bash
-entire checkpoint "qa-complete-{TASK_ID}"
+entire checkpoint "qa-complete-{TASK_ID}" 2>/dev/null || true
 ```
 
 ```
@@ -78,7 +78,7 @@ Checkpoints:
 ## ВЕРДИКТ FAIL
 
 ```bash
-entire checkpoint "qa-fail-{TASK_ID}"
+entire checkpoint "qa-fail-{TASK_ID}" 2>/dev/null || true
 ```
 
 ```
@@ -115,8 +115,8 @@ backlog__task_update(TASK_ID,
 ```
 ОБЯЗАТЕЛЬНО:
   + backlog__task_get(TASK_ID) -- первое действие
-  + entire checkpoint "qa-start-{TASK_ID}" перед тестами
-  + entire checkpoint "qa-complete-{TASK_ID}" или "qa-fail-{TASK_ID}"
+  + entire checkpoint "qa-start-{TASK_ID}" 2>/dev/null || true перед тестами
+  + entire checkpoint "qa-complete-{TASK_ID}" 2>/dev/null || true или "qa-fail-{TASK_ID}"
   + Реальный вывод тестов в отчёте
 
 ЗАПРЕЩЕНО:
