@@ -392,6 +392,64 @@ Intake завершён. Контекст задачи:
 
 Ждать ответа от человека. Не продолжать работу.
 
+### 1.0b Проверить доступность MCP-инструментов для SA
+
+Serena и Context7 значительно повышают качество аналитики.
+Проверить их наличие **до** создания SA-задачи.
+
+```python
+# Проверить Serena MCP
+serena_ok = "serena" in {list доступных MCP серверов в сессии}
+# Или через файловую систему:
+Bash(claude mcp list 2>/dev/null | grep -i serena || echo "SERENA_NOT_FOUND")
+
+# Проверить Context7 MCP
+ctx7_ok = "context7" in {list доступных MCP серверов}
+Bash(claude mcp list 2>/dev/null | grep -i context7 || echo "CTX7_NOT_FOUND")
+```
+
+**Если оба доступны** → продолжить к шагу 1.1. SA получит инструменты семантического поиска.
+
+**Если один или оба недоступны:**
+
+```python
+Task(
+  description="Setup: установить MCP-инструменты для SA-аналитика",
+  prompt="""
+Ты — агент настройки инструментов. Установи недостающие MCP-серверы.
+
+Проверь что установлено:
+  Bash(claude mcp list 2>/dev/null)
+
+Установи отсутствующие:
+
+## Serena MCP (семантическая навигация по коду)
+Если Serena не найден:
+  Bash(claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant --project $(pwd))
+  Bash(claude mcp list | grep serena && echo "OK: Serena установлен" || echo "FAIL: Serena не установлен")
+
+## Context7 MCP (актуальная документация библиотек)
+Если Context7 не найден:
+  Bash(claude mcp add context7 --scope project -- npx -y @context7/mcp@latest)
+  Bash(claude mcp list | grep context7 && echo "OK: Context7 установлен" || echo "FAIL: Context7 не установлен")
+
+Если установка требует перезапуска Claude Code:
+  Сообщить PM-агенту: "MCP установлены. Требуется перезапуск Claude Code для активации.
+  После перезапуска напиши -- продолжим запуск SA-аналитика."
+
+Финальный отчёт:
+  Serena: {установлен / уже был / требует перезапуска / ошибка установки}
+  Context7: {установлен / уже был / требует перезапуска / ошибка установки}
+  """,
+  subagent_type="claude-sonnet-4-5"
+)
+```
+
+**Важно:** если MCP-инструменты недоступны и установка не удалась —
+SA-аналитик **продолжает работу** с Explore-субагентами.
+Серена и Context7 улучшают качество, но не блокируют процесс.
+Зафиксировать в notes задачи: `[SA-TOOLS] serena:{ok/unavailable} ctx7:{ok/unavailable}`
+
 ### 1.1 Создать задачу аналитика
 
 ```
@@ -473,6 +531,17 @@ Bash(ls .claude/agents/analyst.md 2>/dev/null && echo "EXISTS" || echo "MISSING"
 analyst_role = Read(".claude/agents/analyst.md")
 
 # Шаг 2: запустить Task с содержимым файла как системным промптом
+# Передать SA информацию о доступных инструментах
+tools_context = f"""
+Доступные MCP инструменты:
+  Serena: {serena_ok} -- семантическая навигация по символам (find_symbol, find_referencing_symbols)
+  Context7: {ctx7_ok} -- актуальная документация библиотек (resolve-library-id, query-docs)
+  Backlog: доступен
+
+{("Используй Serena для навигации по коду вместо Read всех файлов подряд." if serena_ok else "Serena недоступен — используй Glob + Read.")}
+{("Используй Context7 для документации библиотек вместо предположений." if ctx7_ok else "Context7 недоступен — используй встроенные знания о библиотеках.")}
+"""
+
 Task(
   description="SA аналитика: {название задачи}",
   prompt=f"""{analyst_role}
@@ -481,11 +550,12 @@ Task(
 TASK_ID: {analyst_task_id}
 Режим MCP: BACKLOG
 
+{tools_context}
+
 Первое действие: backlog__task_get({analyst_task_id})
-Второе действие: /spec-kitty.specify
-НЕ создавай задачи до завершения ВСЕХ этапов Spec-Kitty.
+ОБЯЗАТЕЛЬНО пройти Фазу 0 (Исследование) прежде чем запускать Spec-Kitty.
   """,
-  subagent_type="claude-sonnet-4-5"
+  subagent_type="claude-opus-4-5"
 )
 ```
 
@@ -869,6 +939,11 @@ task_data = backlog__task_get(task_id)
 
 qa_role = Read(".claude/agents/qa.md")
 
+# Извлечь worktree и ветку из DEV-REPORT
+dev_report = backlog__task_get(task_id).notes  # найти [DEV-LOG branch: ... | worktree: ...]
+worktree_path = {извлечь из [DEV-LOG branch:... | worktree:{path}]}
+branch_name = {извлечь имя ветки из [DEV-LOG branch:{name}]}
+
 Task(
   description="QA: {название}",
   prompt=f"""
@@ -876,7 +951,14 @@ Task(
 ---
 TASK_ID: {task_id}
 Получи задачу: backlog__task_get({task_id})
-PR: {pr_url}
+
+Код для тестирования:
+  Worktree: {worktree_path}
+  Ветка: {branch_name}
+  PR: {pr_url}
+
+Переключись на ветку перед тестами:
+  cd {worktree_path} && git checkout {branch_name}
 
 Протестируй E2E (API + Playwright).
 PASS → backlog__task_update({task_id}, notes="[QA-LOG verified | evidence: вывод тестов]")
