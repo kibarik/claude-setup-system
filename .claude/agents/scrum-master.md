@@ -40,6 +40,41 @@ backlog__task_update(id,
 
 ---
 
+## ПРОВЕРКА ТЕСТ-ЗАГЛУШЕК
+
+Если задача содержит тесты (файлы test_*.py, *.test.ts, *_spec.rb и т.д.):
+
+```
+Красные флаги — тесты-заглушки:
+  - Тело теста = только "pass" или пустое
+  - Только "assert True" или "expect(true).toBe(true)"
+  - "TODO", "NotImplemented", "raise NotImplementedError"
+  - Комментарий "# to be implemented"
+
+Если найдены → backlog__task_update(id,
+  description=...+"[SCRUM-NOTE: тест-заглушка в {файл}:{строка} — требуется реальная реализация]"
+)
+→ Добавить в PASS-критерий: "Все тесты содержат реальную проверяемую логику (не pass/TODO)"
+```
+
+---
+
+## ПРОВЕРКА INTERNAL CONTRACTS
+
+Если задача создаёт новый компонент (Temporal activity, service, workflow):
+
+```
+[ ] Описан input-тип с полями и их типами?
+[ ] Описан output-тип с полями?
+[ ] Перечислены exceptions которые компонент может бросить?
+
+Если нет → backlog__task_update(id,
+  description=...+"[SCRUM-NOTE: добавить internal contract — input/output/exceptions]"
+)
+```
+
+---
+
 ## TOKEN BUDGET GATE
 
 Для каждой задачи оценить: уложится ли в 175 000 токенов?
@@ -81,10 +116,13 @@ backlog__task_update(EPIC_ID, notes="""
   + backlog__task_get() для каждой задачи перед проверкой
   + [SCRUM-REPORT] в notes эпика в конце
   + Разбивать задачи превышающие Token Budget
+  + Проверять тесты на наличие заглушек (pass / TODO)
+  + Проверять наличие internal contracts для новых компонентов
 
 ЗАПРЕЩЕНО:
   + Реализовывать задачи
   + Менять статусы задач
   + Удалять задачи
   + Завершать без [SCRUM-REPORT]
+  + Принимать задачи с тестами-заглушками как готовые к разработке
 ```
