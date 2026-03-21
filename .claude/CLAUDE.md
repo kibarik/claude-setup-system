@@ -1191,12 +1191,7 @@ Bash(entire log --limit 5 2>/dev/null || echo "Entire недоступен")
 
 **Принцип работы:** PM работает волнами. Каждая волна — одновременный запуск всех агентов для всех actionable задач. Агенты пишут результаты в Backlog. PM сканирует статусы после каждой волны и запускает следующую. Цикл продолжается до завершения всего беклога.
 
-**Лимиты параллельности:**
-```
-MAX_DEV_PARALLEL    = 3   # одновременных DEV-агентов
-MAX_REVIEW_PARALLEL = 3   # одновременных REVIEW-агентов
-MAX_QA_PARALLEL     = 3   # одновременных QA-агентов
-```
+**Параллельность:** без ограничений — запускается столько агентов сколько есть actionable задач.
 
 ### 3.0 Предварительные проверки
 
@@ -1233,10 +1228,10 @@ active_ids = {t.id for t in all_tasks
               if "[AGENT-ACTIVE]" in (t.notes or "")}
 
 # Actionable = есть работа И нет активного агента
-dev_queue    = [t for t in todo         if t.id not in active_ids][:MAX_DEV_PARALLEL]
-fix_queue    = [t for t in review_debug if t.id not in active_ids]
-review_queue = [t for t in code_review  if t.id not in active_ids][:MAX_REVIEW_PARALLEL]
-qa_queue     = [t for t in ready_qa     if t.id not in active_ids][:MAX_QA_PARALLEL]
+fix_queue    = [t for t in review_debug if t.id not in active_ids]  # сначала — приоритет
+dev_queue    = [t for t in todo         if t.id not in active_ids]  # потом новые задачи
+review_queue = [t for t in code_review  if t.id not in active_ids]
+qa_queue     = [t for t in ready_qa     if t.id not in active_ids]
 ```
 
 #### Шаг B: Проверить условие завершения
@@ -1276,26 +1271,12 @@ for task in dev_queue + fix_queue + review_queue + qa_queue:
 **Все Task() вызываются в одном шаге — они работают одновременно.**
 
 ```python
-# ── DEV агенты (новые задачи) ──────────────────────────────────
-for task in dev_queue:
-    Task(
-        description=f"DEV: {task.title}",
-        prompt=f"""{developer_role}
----
-TASK_ID: {task.id}
-CURRENT_DIR: {current_dir}
-Режим MCP: BACKLOG
+# ── DEV агенты (исправления review-debug — ПРИОРИТЕТ) ──────────
+# Сначала исправляем отклонённые задачи, затем берём новые.
+# fix_queue запускается первым но не блокирует dev_queue — оба идут в одной волне.
 
-Первое действие: backlog__task_get({task.id})
-По завершению добавить в notes: [PM-NOTIFY dev-complete TASK_ID={task.id}]
-        """,
-        model="claude-opus-4-5",
-        subagent_type="general-purpose"
-    )
-
-# ── DEV агенты (исправления после review-debug) ─────────────────
+# ── DEV агенты (исправления review-debug — ЗАПУСКАЮТСЯ ПЕРВЫМИ) ─
 for task in fix_queue:
-    # Найти [REVIEW] задачу с замечаниями
     review_task = find_review_task_for(task.id)  # backlog__task_list() → [REVIEW] * task.id
     Task(
         description=f"DEV-fix: {task.title}",
@@ -1309,6 +1290,23 @@ CURRENT_DIR: {current_dir}
 Задача в статусе review-debug. Прочитай замечания:
   backlog__task_get({review_task.id}) → секция "Что именно нужно исправить"
 Исправь каждый пункт и снова переведи в code-review.
+По завершению добавить в notes: [PM-NOTIFY dev-complete TASK_ID={task.id}]
+        """,
+        model="claude-opus-4-5",
+        subagent_type="general-purpose"
+    )
+
+# ── DEV агенты (новые задачи из todo) ──────────────────────────
+for task in dev_queue:
+    Task(
+        description=f"DEV: {task.title}",
+        prompt=f"""{developer_role}
+---
+TASK_ID: {task.id}
+CURRENT_DIR: {current_dir}
+Режим MCP: BACKLOG
+
+Первое действие: backlog__task_get({task.id})
 По завершению добавить в notes: [PM-NOTIFY dev-complete TASK_ID={task.id}]
         """,
         model="claude-opus-4-5",
