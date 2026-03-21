@@ -90,18 +90,43 @@ WORK_DIR=$(pwd)
 echo "Копирую из: $ROOT_DIR -> $WORK_DIR"
 
 # 2.1 Скопировать .claude (агенты, конфиги MCP)
+AGENTS_MISSING=""
+
 if [ -d "$ROOT_DIR/.claude" ]; then
   cp -r "$ROOT_DIR/.claude" "$WORK_DIR/.claude"
-  echo "OK: .claude скопирована"
-  for agent in git-sync.md analyst.md scrum-master.md developer.md qa.md; do
-    if [ -f "$WORK_DIR/.claude/agents/$agent" ]; then
-      echo "  OK: агент $agent"
+  echo "OK: .claude скопирована из $ROOT_DIR"
+
+  # Проверить каждый агент — не просто папку, а реальные файлы с содержимым
+  for agent in git-sync.md analyst.md scrum-master.md developer.md qa.md reviewer.md; do
+    AGENT_PATH="$WORK_DIR/.claude/agents/$agent"
+    if [ -f "$AGENT_PATH" ] && [ -s "$AGENT_PATH" ]; then
+      echo "  OK: агент $agent ($(wc -l < "$AGENT_PATH") строк)"
     else
-      echo "  WARNING: агент $agent отсутствует"
+      echo "  MISSING: агент $agent отсутствует или пустой"
+      AGENTS_MISSING="$AGENTS_MISSING $agent"
     fi
   done
+
+  if [ -n "$AGENTS_MISSING" ]; then
+    echo ""
+    echo "AGENTS_STATUS=INCOMPLETE"
+    echo "Отсутствующие агенты:$AGENTS_MISSING"
+    echo ""
+    echo "ПРИЧИНА: Файлы агентов не зафиксированы в репозитории $ROOT_DIR."
+    echo "Проверь: ls $ROOT_DIR/.claude/agents/"
+    echo "Если папка пуста — агенты нужно добавить в репозиторий вручную."
+  else
+    echo "AGENTS_STATUS=COMPLETE"
+  fi
+
 else
-  echo "WARNING: .claude не найдена в $ROOT_DIR"
+  echo "NO_CLAUDE_DIR: .claude не найдена в $ROOT_DIR"
+  echo "AGENTS_STATUS=NO_SOURCE"
+  echo ""
+  echo "ПРИЧИНА: В главной папке репозитория отсутствует .claude/."
+  echo "Это первый запуск на новом проекте — .claude нужно создать."
+  mkdir -p "$WORK_DIR/.claude/agents"
+  echo "Создана пустая структура: $WORK_DIR/.claude/agents/"
 fi
 
 # 2.2 Скопировать конфиги и dot-файлы
@@ -285,16 +310,28 @@ echo "=== ВЕРИФИКАЦИЯ ЗАВЕРШЕНА ==="
 TASK_ID передаётся PM-агентом при запуске (см. prompt). Использовать его для записи отчёта.
 
 ```
+# Определить итоговый статус
+FINAL_STATUS="ЗАВЕРШЕНО"
+WARNINGS=""
+
+if [ "$AGENTS_STATUS" = "INCOMPLETE" ]; then
+  FINAL_STATUS="ЗАВЕРШЕНО С ПРЕДУПРЕЖДЕНИЯМИ"
+  WARNINGS="Агенты отсутствуют в репозитории:$AGENTS_MISSING"
+elif [ "$AGENTS_STATUS" = "NO_SOURCE" ]; then
+  FINAL_STATUS="ЗАВЕРШЕНО С ПРЕДУПРЕЖДЕНИЯМИ"
+  WARNINGS=".claude не найдена в репозитории — первый запуск на новом проекте"
+fi
+
 backlog__task_update(TASK_ID, status="done", notes="""
 [SYNC-REPORT]
-Статус: ЗАВЕРШЕНО | ЗАВЕРШЕНО С ПРЕДУПРЕЖДЕНИЯМИ | ОШИБКА
+Статус: {FINAL_STATUS}
 
 Тип: главная папка / worktree
 Главная папка: {ROOT_DIR}
 
 ШАГ 2 -- Копирование:
-  .claude:        {скопирована / уже присутствовала / WARNING}
-  .claude/agents: {список файлов}
+  .claude:        {скопирована / создана пустая / WARNING}
+  .claude/agents: {AGENTS_STATUS} | файлы: {список или "нет"}
   dot-файлы:      {список}
   docs/:          {скопирована / присутствовала / нет}
 
@@ -307,7 +344,11 @@ backlog__task_update(TASK_ID, status="done", notes="""
   Субмодули: {N} синхронизировано
   Stash: {ref или "не создавался"}
 
-Предупреждения: {список или "нет"}
+Предупреждения: {WARNINGS или "нет"}
+
+{если AGENTS_STATUS != COMPLETE:
+"[AGENTS_MISSING] Следующие агенты не найдены в репозитории: {список}
+ Действие PM: остановиться и проинструктировать пользователя добавить файлы агентов."}
 """)
 ```
 
