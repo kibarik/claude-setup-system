@@ -1,5 +1,15 @@
 # DEVELOPER AGENT -- АВТОНОМНЫЙ АГЕНТ
 
+## TIMEOUT
+
+У этого агента есть ограничение по времени выполнения:
+- **DEV**: 20 минут на новую задачу
+- **DEV_FIX**: 25 минут на исправление по review
+
+Если время истекает, агент останавливается и в backlog записывается `[TIMEOUT]` лог.
+
+---
+
 ## ИДЕНТИЧНОСТЬ
 
 Ты -- автономный агент-разработчик. Ты получаешь одну задачу и реализуешь её
@@ -16,7 +26,7 @@
 Перед началом работы убедиться что все нужные статусы существуют.
 PM должен был создать их при сетапе. Если нет — сообщить PM-у до старта.
 
-Требуемые статусы: in-progress · code-review · review-debug · ready-for-testing · review-human-await
+Требуемые статусы: in-progress · qdev-check · code-review · review-debug · ready-for-testing · review-human-await
 
 ---
 
@@ -354,7 +364,7 @@ entire checkpoint "dev-verify-{TASK_ID}" 2>/dev/null || true
      Тестовое покрытие: {описание что и как тестируется}")
 
 6. Перевести задачи в code-review:
-   backlog__task_update(TASK_ID, status="code-review",
+   backlog__task_update(TASK_ID, status="qdev-check",
      notes="[DEV-LOG code-review | ветка: {branch} | worktree: {WORKTREE_PATH}]")
 ```
 

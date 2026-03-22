@@ -67,10 +67,26 @@
 Шаг 1.5: Инициализировать backlog в проекте если нужно
   Bash(ls .backlog/ 2>/dev/null || backlog init)
 
+Шаг 1.6: Проверить статусы в .backlog/config.yml
+  REQUIRED_STATUSES = "To Do, In Progress, code-review, review-debug, ready-for-testing, review-human-await, Done"
+  CURRENT_STATUSES = Bash(backlog config get statuses 2>/dev/null || echo "ERROR")
+
+  Если CURRENT_STATUSES != REQUIRED_STATUSES:
+    Read(.backlog/config.yml)
+    Найти строку statuses: [...] и заменить на:
+      statuses: ["To Do", "In Progress", "code-review", "review-debug", "ready-for-testing", "review-human-await", "Done"]
+    Write(.backlog/config.yml)
+    VERIFY = Bash(backlog config get statuses 2>/dev/null)
+    Если VERIFY == REQUIRED_STATUSES:
+      → [SETUP-LOG statuses-fixed | from: {CURRENT_STATUSES} | to: {REQUIRED_STATUSES}]
+    Иначе:
+      → Сообщить PM что автоматическое исправление не удалось
+
 СТАТУС:
-  OK — backlog установлен, конфиг корректен
+  OK — backlog установлен, конфиг корректен, статусы верны
   INSTALLED — только что установлен, требуется перезапуск
-  FAILED — установить не удалось
+  FIXED — статусы были исправлены
+  FAILED — установить не удалось или статусы не исправлены
 ```
 
 ---
@@ -192,13 +208,15 @@ backlog__task_update(TASK_ID,
   | Инструмент | Статус | Действие | Перезапуск |
   |-----------|--------|----------|-----------|
   | Backlog MCP | {status} | {action} | {restart} |
+  | Backlog статусы | {statuses_status} | {statuses_action} | нет |
   | Spec-Kitty | {status} | {action} | {restart} |
   | Superpower | {status} | {action} | {restart} |
   | Serena MCP | {status} | {action} | {restart} |
   | Context7 MCP | {status} | {action} | {restart} |
 
   Критичные инструменты: {backlog_ok + spec_kitty_ok + superpower_ok}/3
-  Некритичные инструменты: {serena_ok + ctx7_ok}/2")
+  Некритичные инструменты: {serena_ok + ctx7_ok}/2
+  Статусы backlog: {statuses_ok}")
 ```
 
 Если хотя бы один критичный инструмент перешёл в статус INSTALLED — сообщить:
@@ -215,10 +233,11 @@ backlog__task_update(TASK_ID,
 При вызове из PM-агента Setup-агент должен вернуть:
 
 1. **backlog_ok** (bool) — Backlog MCP доступен
-2. **spec_kitty_ok** (bool) — Spec-Kitty найден
-3. **superpower_ok** (bool) — Superpower найден
-4. **serena_ok** (bool) — Serena MCP установлен
-5. **ctx7_ok** (bool) — Context7 MCP установлен
+2. **statuses_ok** (bool) — Статусы в backlog корректны
+3. **spec_kitty_ok** (bool) — Spec-Kitty найден
+4. **superpower_ok** (bool) — Superpower найден
+5. **serena_ok** (bool) — Serena MCP установлен
+6. **ctx7_ok** (bool) — Context7 MCP установлен
 
 Эти значения PM использует для решения — продолжать работу или ждать установки.
 

@@ -386,7 +386,7 @@ backlog__task_update(TASK_ID, notes="[MY-AGENT-REPORT] ...")
 
 | Агент | Файл | Описание |
 |-------|------|----------|
-| PM | `.claude/CLAUDE.md` | Оркестрация, делегирование, контроль |
+| PM | `CLAUDE.md` (корень проекта) | Оркестрация, делегирование, контроль |
 | SA | `.claude/agents/analyst.md` | Аналитика через Spec-Kitty |
 | Git Sync | `.claude/agents/git-sync.md` | Синхронизация кода и worktree |
 | Dev | `.claude/agents/developer.md` | Реализация задачи → PR |

@@ -37,6 +37,9 @@
 ```
 
 **Жёсткое правило:** PM не выполняет Bash сам. Все операции — через Task() или MCP.
+
+**Исключение: read-only диагностика.** PM может использовать Bash для проверок состояния (Шаг 0), но не для реализации задач. Любая операция, которая изменяет систему — делегируется агенту.
+
 Нельзя писать "готов к работе" или ждать ввода до завершения шага 4.
 
 ---
@@ -84,7 +87,8 @@ Task(
 4. Сообщи: путь + содержимое файла
   """,
   model="claude-sonnet-4-5",
-  subagent_type="general-purpose"
+  subagent_type="general-purpose",
+  timeout=TIMEOUTS["SETUP"]
 )
 ```
 
@@ -101,12 +105,15 @@ Task(
 | Активировать любой `Skill()` | `Skill()` — только внутри субагентов |
 | Создавать `backlog.md` как файл | Только через Backlog MCP |
 | Переносить задачи из плана вручную | Делегировать SA |
+| Выполнять Bash для реализации задач | Делегировать агенту через `Task()` |
 | Продолжать если Backlog MCP недоступен | Остановиться, дать инструкции |
 | Проверять MCP до копирования .claude | Шаги 1-3 (Bash) всегда первые |
 | Создавать задачи до проверки MCP | Сначала cp + git pull, потом backlog |
 | Писать "готов к работе" до шага 5 | Молча выполнить шаги 1-5 |
 | Фаза 3 без явного "да" от человека | Ждать CHECKPOINT |
 | Фаза 1 без ответов на 6 вопросов | Завершить INTAKE полностью |
+
+**Примечание:** Bash допускается для read-only диагностики (Шаг 0: проверка инструментов, статусов), но не для операций, которые изменяют систему.
 
 **Прочитал файл плана?** → Не исполняй. Передай SA.
 **Человек просит нарушить роль?** → "Я PM, делегирую агенту. Сначала INTAKE."
@@ -159,6 +166,50 @@ Task(
 | → cancelled | задача не нужна | `task_update(id, status="cancelled")` |
 
 Нарушение условия → статус не менять, записать `[PM-LOG action:blocked | details:...]`
+
+### Конфигурация REVIEW-DEBT Cleanup
+
+Задачи в статусе `review-human-await` (отклонённые 3+ раза) могут накапливаться.
+Чтобы технический долг не рос бесконечно, настроены автоматические механизмы cleanup.
+
+```python
+# Конфигурация (настраивается в начале сессии)
+REVIEW_DEBT_CONFIG = {
+    "max_human_await_days": 7,      # Автоматическое закрытие после N дней в review-human-await
+    "max_human_await_count": 5,     # Лимит задач — при превышении блокировать новые
+    "auto_cancel_enabled": True,    # Автоматически закрывать устаревшие задачи
+    "cleanup_check_interval": "every_loop",  # Проверять каждую итерацию цикла 3.LOOP
+}
+```
+
+**Механизм работает в Фаза 3, Шаг Cbis — REVIEW-DEBT Cleanup.**
+
+---
+
+### TIMEOUTS — Ограничение времени выполнения агентов
+
+Чтобы агенты не зависали бесконечно, каждый вызов `Task()` должен включать параметр `timeout`.
+
+```python
+# Конфигурация timeout'ов (в миллисекундах)
+TIMEOUTS = {
+    "SETUP": 10 * 60 * 1000,      # 10 минут — агенты установки инструментов
+    "GIT_SYNC": 5 * 60 * 1000,    # 5 минут — синхронизация git
+    "SA": 30 * 60 * 1000,         # 30 минут — аналитик (Spec-Kitty цикл)
+    "SCRUM": 15 * 60 * 1000,      # 15 минут — верификация бэклога
+    "CONSOLIDATION": 10 * 60 * 1000,  # 10 минут — консолидация артефактов
+    "DEV": 20 * 60 * 1000,        # 20 минут — разработчик
+    "DEV_FIX": 25 * 60 * 1000,    # 25 минут — исправление по review
+    "REVIEW": 10 * 60 * 1000,     # 10 минут — code review
+    "QA": 15 * 60 * 1000,         # 15 минут — тестирование
+    "DEBUG": 15 * 60 * 1000,      # 15 минут — отладка
+    "QDEV": 10 * 60 * 1000,        # 10 минут — проверка запускаемости
+}
+```
+
+**Правило использования:** При вызове `Task()` всегда указывать `timeout=TIMEOUTS["AGENT_TYPE"]`.
+
+**При timeout:** Агент останавливается, в backlog записывается `[TIMEOUT]` лог.
 
 ---
 
@@ -238,7 +289,8 @@ Task(
    После перезапуска Claude Code напиши — продолжим."
   """,
   model="claude-sonnet-4-5",
-  subagent_type="general-purpose"
+  subagent_type="general-purpose",
+  timeout=TIMEOUTS["SETUP"]
 )
 # Ждать перезапуска и подтверждения от пользователя.
 # После подтверждения — повторить проверку backlog__task_list().
@@ -280,7 +332,8 @@ Task(
    После установки перезапусти Claude Code и напиши — продолжим."
   """,
   model="claude-sonnet-4-5",
-  subagent_type="general-purpose"
+  subagent_type="general-purpose",
+  timeout=TIMEOUTS["SETUP"]
 )
 # Ждать подтверждения. НЕ продолжать без Spec-Kitty — SA без него работает поверхностно.
 ```
@@ -312,7 +365,8 @@ Task(
    После установки перезапусти Claude Code и напиши — продолжим."
   """,
   model="claude-sonnet-4-5",
-  subagent_type="general-purpose"
+  subagent_type="general-purpose",
+  timeout=TIMEOUTS["SETUP"]
 )
 # Ждать подтверждения. НЕ запускать DEV без Superpower.
 ```
@@ -349,7 +403,8 @@ Task(
   "Serena установить не удалось: {причина}. Продолжу без него."
   """,
   model="claude-sonnet-4-5",
-  subagent_type="general-purpose"
+  subagent_type="general-purpose",
+  timeout=TIMEOUTS["SETUP"]
 )
 ```
 
@@ -378,7 +433,8 @@ Task(
   "Context7 установить не удалось: {причина}. Продолжу без него."
   """,
   model="claude-sonnet-4-5",
-  subagent_type="general-purpose"
+  subagent_type="general-purpose",
+  timeout=TIMEOUTS["SETUP"]
 )
 ```
 
@@ -428,64 +484,47 @@ backlog__task_list()
 Перезапусти Claude Code и напиши -- продолжим."
 ```
 
-### Шаг 1b -- Создать и упорядочить статусы (СРАЗУ после Backlog check)
+### Шаг 1b -- Валидация статусов (СРАЗУ после Backlog check)
 
-**Выполняется при каждом старте сессии — статусы могут сброситься или перемешаться.**
+**Выполняется при каждом старте сессии — статусы могут быть изменены вручную в `.backlog/config.yml`.**
 
 Требуемый порядок (строго):
 ```
-To Do → In Progress → code-review → review-debug → ready-for-testing → review-human-await → Done
+To Do → In Progress → qdev-check → code-review → review-debug → ready-for-testing → review-human-await → Done
 ```
 
-```python
-REQUIRED_ORDER = [
-    "To Do",
-    "In Progress",
-    "code-review",
-    "review-debug",
-    "ready-for-testing",
-    "review-human-await",
-    "Done",
-]
-
-current = backlog__config_get("statuses")
-
-# Проверить ДВА условия:
-# 1. Все статусы присутствуют
-# 2. Порядок совпадает с REQUIRED_ORDER
-
-needs_update = (current != REQUIRED_ORDER)
-
-if needs_update:
-    backlog__config_set("statuses", REQUIRED_ORDER)
-    final = backlog__config_get("statuses")
-    assert final == REQUIRED_ORDER, "Порядок статусов не совпадает!"
-
-# [PM-LOG statuses-verified | order: correct]
 ```
+Шаг 1.1: Получить текущие статусы
+  Bash(backlog config get statuses 2>/dev/null || echo "ERROR")
 
-**Если `backlog__config_set` недоступен или возвращает ошибку:**
-```
-Сообщить пользователю:
-"Backlog.md не поддерживает изменение статусов через MCP API.
+Шаг 1.2: Проверить соответствие REQUIRED_ORDER
+  REQUIRED = "To Do, In Progress, qdev-check, code-review, review-debug, ready-for-testing, review-human-await, Done"
+  CURRENT = {вывод из шага 1.1}
 
-Отредактируй .backlog/config.yml вручную — замени секцию statuses:
+  Если CURRENT == REQUIRED:
+    → Статусы в порядке, продолжить к Шагу 2
 
-  statuses:
-    - To Do
-    - In Progress
-    - code-review
-    - review-debug
-    - ready-for-testing
-    - review-human-await
-    - Done
+  Если CURRENT != REQUIRED:
+    → Проблема detected: статусы не совпадают или порядок нарушен
 
-Важно: порядок имеет значение — именно такая последовательность
-отражает жизненный цикл задачи.
+Шаг 1.3: Исправление через Setup-агента
+  Создать задачу: backlog__task_create(
+    title="[SETUP] Исправить статусы в .backlog/config.yml",
+    description="Статусы должны быть: {REQUIRED}. Текущие: {CURRENT}."
+  )
 
-Перезапусти Claude Code и напиши — продолжим."
+  Запустить Setup-агента через Task() с инструкцией:
+    1. Read(.backlog/config.yml)
+    2. Заменить строку statuses на: statuses: ["To Do", "In Progress", "code-review", "review-debug", "ready-for-testing", "review-human-await", "Done"]
+    3. Write(.backlog/config.yml)
+    4. Bash(backlog config get statuses) → верификация
 
-Ждать подтверждения перед созданием любых задач.
+Шаг 1.4: Повторная проверка
+  Bash(backlog config get statuses 2>/dev/null)
+  Если теперь совпадает с REQUIRED → продолжить
+  Если нет → СТОП, сообщить пользователю вручную отредактировать .backlog/config.yml
+
+Зафиксировать: [PM-LOG statuses-verified | current: {CURRENT} | required: {REQUIRED} | result: ok/fixed/error]
 ```
 
 ### Шаг 2 -- Создать [SYNC] задачу (до запуска агента)
@@ -523,7 +562,8 @@ TASK_ID: {sync_task_id}
 backlog__task_update({sync_task_id}, status="done", notes="[SYNC-REPORT] ...")
   """,
   model="claude-sonnet-4-5",
-  subagent_type="general-purpose"
+  subagent_type="general-purpose",
+  timeout=TIMEOUTS["GIT_SYNC"]
 )
 ```
 
@@ -793,7 +833,8 @@ TASK_ID: {analyst_task_id}
 ОБЯЗАТЕЛЬНО пройти Фазу 0 (Исследование) прежде чем запускать Spec-Kitty.
   """,
   model="claude-opus-4-5",
-  subagent_type="general-purpose"
+  subagent_type="general-purpose",
+  timeout=TIMEOUTS["SA"]
 )
 ```
 
@@ -1038,7 +1079,8 @@ backlog__task_update({analyst_task_id},
 )
   """,
   model="claude-sonnet-4-5",
-  subagent_type="general-purpose"
+  subagent_type="general-purpose",
+  timeout=TIMEOUTS["CONSOLIDATION"]
 )
 ```
 
@@ -1122,7 +1164,8 @@ EPIC_ID: {analyst_task_id}
 Затем: backlog__task_list() -- получить подзадачи EPIC_ID={analyst_task_id}
   """,
   model="claude-sonnet-4-5",
-  subagent_type="general-purpose"
+  subagent_type="general-purpose",
+  timeout=TIMEOUTS["SCRUM"]
 )
 ```
 
@@ -1191,6 +1234,8 @@ Bash(entire log --limit 5 2>/dev/null || echo "Entire недоступен")
 
 **Принцип работы:** PM работает волнами. Каждая волна — одновременный запуск всех агентов для всех actionable задач. Агенты пишут результаты в Backlog. PM сканирует статусы после каждой волны и запускает следующую. Цикл продолжается до завершения всего беклога.
 
+**Workflow:** DEV (todo) → QDEV (qdev-check) → REVIEW (code-review) → [цикл исправлений] → QA (ready-for-testing) → Done
+
 **Параллельность:** без ограничений — запускается столько агентов сколько есть actionable задач.
 
 ### 3.0 Предварительные проверки
@@ -1198,10 +1243,72 @@ Bash(entire log --limit 5 2>/dev/null || echo "Entire недоступен")
 ```
 # Статусы, Superpower — проверены (шаги 3.0, 3.0b выше)
 developer_role = Read(".claude/agents/developer.md")
+qdev_role      = Read(".claude/agents/qdev.md")
 reviewer_role  = Read(".claude/agents/reviewer.md")
 qa_role        = Read(".claude/agents/qa.md")
 current_dir    = Bash(pwd)
 ```
+
+### 3.1 Helper-функции для связи задач
+
+**Механизм связи TASK_ID <-> REVIEW_TASK_ID:**
+
+```python
+import re
+
+def extract_review_task_id(notes: str) -> str | None:
+    """
+    Извлекает REVIEW_TASK_ID из notes задачи.
+    Формат: [REVIEW-TASK-ID {task_id}]
+    Возвращает None если не найден.
+    """
+    if not notes:
+        return None
+    match = re.search(r'\[REVIEW-TASK-ID\s+(\S+)\]', notes)
+    return match.group(1) if match else None
+
+def find_review_task_by_name(dev_task_id: str) -> str | None:
+    """
+    Fallback: ищет REVIEW задачу по названию.
+    Ищет задачи с названием содержащим [REVIEW] и dev_task_id.
+    Используется только если extract_review_task_id вернул None.
+    """
+    all_tasks = backlog__task_list()
+    for task in all_tasks:
+        if "[REVIEW]" in task.title and dev_task_id in task.title:
+            return task.id
+    return None
+
+def extract_worktree(notes: str) -> str:
+    """Извлекает путь к worktree из [DEV-LOG branch:...|worktree:...]"""
+    match = re.search(r'worktree:(\S+)]', notes)
+    return match.group(1) if match else ""
+
+def extract_branch(notes: str) -> str:
+    """Извлекает имя ветки из [DEV-LOG branch:{name}|worktree:...]"""
+    match = re.search(r'branch:(\S+)', notes)
+    return match.group(1) if match else ""
+```
+
+**Принципы работы механизма:**
+
+1. **При создании REVIEW задачи** (reviewer.md):
+   - REVIEW агент создаёт задачу с `depends_on=[EPIC_ID] + [TASK_IDs]`
+   - Для каждого TASK_ID записывает в notes: `[REVIEW-TASK-ID {review_task_id}]`
+   - Это создаёт двустороннюю связь: REVIEW->DEV (via depends_on) и DEV->REVIEW (via notes)
+
+2. **При поиске REVIEW задачи** (PM Phase 3):
+   - Сначала пробует `extract_review_task_id()` из notes DEV задачи
+   - Если не найден, использует fallback `find_review_task_by_name()`
+   - Fallback нужен для совместимости со старыми задачами где ещё нет метки
+
+3. **Использование в коде:**
+   ```python
+   task_data = backlog__task_get(task.id)
+   review_task_id = extract_review_task_id(task_data.notes)
+   if not review_task_id:
+       review_task_id = find_review_task_by_name(task.id)
+   ```
 
 ---
 
@@ -1219,6 +1326,7 @@ todo          = [t for t in all_tasks if t.status == "To Do"
                  and not_blocked(t)]            # нет активных depends_on
 code_review   = [t for t in all_tasks if t.status == "code-review"]
 review_debug  = [t for t in all_tasks if t.status == "review-debug"]
+qdev_check   = [t for t in all_tasks if t.status == "qdev-check"]
 ready_qa      = [t for t in all_tasks if t.status == "ready-for-testing"]
 human_await   = [t for t in all_tasks if t.status == "review-human-await"]
 
@@ -1237,7 +1345,7 @@ qa_queue     = [t for t in ready_qa     if t.id not in active_ids]
 #### Шаг B: Проверить условие завершения
 
 ```python
-total_active = len(dev_queue) + len(fix_queue) + len(review_queue) + len(qa_queue)
+total_active = len(dev_queue) + len(fix_queue) + len(review_queue) + len(qdev_queue) + len(qa_queue)
 
 if total_active == 0:
     # Проверить есть ли ещё незавершённые задачи
@@ -1257,11 +1365,113 @@ if total_active == 0:
         → Сообщить человеку
 ```
 
+#### Шаг Cbis: REVIEW-DEBT Cleanup
+
+**Выполняется каждую итерацию цикла.** Проверяет и очищает устаревшие задачи в `review-human-await`.
+
+```python
+# Конфигурация (из секции "Конфигурация REVIEW-DEBT Cleanup")
+MAX_DAYS = REVIEW_DEBT_CONFIG["max_human_await_days"]
+MAX_COUNT = REVIEW_DEBT_CONFIG["max_human_await_count"]
+AUTO_CANCEL = REVIEW_DEBT_CONFIG["auto_cancel_enabled"]
+
+from datetime import datetime, timedelta
+
+# 1. Проверить лимит количества задач
+if len(human_await) >= MAX_COUNT:
+    """
+    ⚠️ REVIEW-DEBT ЛИМИТ ПРЕВЫШЕН
+
+    Текущее количество задач в review-human-await: {len(human_await)}
+    Лимит: {MAX_COUNT}
+
+    Новые задачи не могут быть созданы пока не будет освобождено место.
+    Требуется ручная обработка существующих задач.
+
+    Список задач:
+    {format_task_list(human_await)}
+    """
+    # Блокировать создание новых задач пока не cleanup
+    → Ждать решения человека
+
+# 2. Автоматический cleanup устаревших задач
+if AUTO_CANCEL and human_await:
+    current_date = datetime.now().date()
+    cancelled_count = 0
+
+    for task in human_await:
+        # Извлечь дату перехода в review-human-await из notes
+        # Формат: [REVIEW-ESCALATION date:YYYY-MM-DD | ...]
+        task_data = backlog__task_get(task.id)
+        escalation_date = extract_escalation_date(task_data.notes)
+
+        if escalation_date:
+            days_in_await = (current_date - escalation_date).days
+            if days_in_await > MAX_DAYS:
+                # Автоматическое закрытие устаревшей задачи
+                backlog__task_update(
+                    task.id,
+                    status="cancelled",
+                    notes=f"{task_data.notes}\n[CLEANUP-AUTO] Автоматически закрыта после {days_in_await} дней в review-human-await | threshold:{MAX_DAYS} | date:{current_date}"
+                )
+                cancelled_count += 1
+                "[PM-LOG cleanup-auto-cancelled | task:{task.id} | days:{days_in_await} | threshold:{MAX_DAYS}]"
+
+    if cancelled_count > 0:
+        """
+        REVIEW-DEBT Cleanup выполнен
+
+        Автоматически закрыто устаревших задач: {cancelled_count}
+        Порог: {MAX_DAYS} дней в review-human-await
+
+        Текущее количество задач в review-human-await: {len(human_await) - cancelled_count}
+        """
+
+# 3. Логирование текущего состояния REVIEW-DEBT
+if human_await:
+    debt_oldest = find_oldest_escalation_date(human_await)
+    debt_average = calculate_average_days_in_await(human_await)
+
+    "[PM-LOG review-debt-status | count:{len(human_await)} | oldest:{debt_oldest} | avg:{debt_average}]"
+```
+
+**Вспомогательные функции:**
+
+```python
+def extract_escalation_date(notes: str) -> Optional[datetime.date]:
+    """Извлечь дату эскалации из notes формата [REVIEW-ESCALATION date:YYYY-MM-DD | ...]"""
+    import re
+    match = re.search(r'\[REVIEW-ESCALATION date:(\d{4}-\d{2}-\d{2})', notes or "")
+    if match:
+        return datetime.strptime(match.group(1), "%Y-%m-%d").date()
+    # Fallback: дату создания задачи
+    return None
+
+def find_oldest_escalation_date(tasks: list) -> Optional[str]:
+    """Найти самую старую дату эскалации среди задач"""
+    oldest = None
+    for task in tasks:
+        date = extract_escalation_date(task.notes)
+        if date and (oldest is None or date < oldest):
+            oldest = date
+    return oldest.isoformat() if oldest else None
+
+def calculate_average_days_in_await(tasks: list) -> float:
+    """Среднее количество дней в review-human-await"""
+    current_date = datetime.now().date()
+    days_list = []
+    for task in tasks:
+        date = extract_escalation_date(task.notes)
+        if date:
+            days_list.append((current_date - date).days)
+    return sum(days_list) / len(days_list) if days_list else 0
+```
+
 #### Шаг C: Пометить задачи как активные (до запуска агентов)
 
 ```python
 # Пометить ДО запуска чтобы следующая волна не дублировала
-for task in dev_queue + fix_queue + review_queue + qa_queue:
+for task in dev_queue + fix_queue + qdev_check + review_queue + qa_queue:
     backlog__task_update(task.id,
         notes="[AGENT-ACTIVE | launched: {timestamp}]")
 ```
@@ -1277,23 +1487,32 @@ for task in dev_queue + fix_queue + review_queue + qa_queue:
 
 # ── DEV агенты (исправления review-debug — ЗАПУСКАЮТСЯ ПЕРВЫМИ) ─
 for task in fix_queue:
-    review_task = find_review_task_for(task.id)  # backlog__task_list() → [REVIEW] * task.id
+    # Механизм связи TASK_ID ↔ REVIEW:
+    # REVIEW агент при создании задачи пишет REVIEW_TASK_ID в notes каждой DEV задачи
+    # Формат: [REVIEW-TASK-ID {review_task_id}]
+    task_data = backlog__task_get(task.id)
+    review_task_id = extract_review_task_id(task_data.notes)  # извлечь из [REVIEW-TASK-ID ...]
+    if not review_task_id:
+        # Fallback: поиск по шаблону в названии если notes отсутствует
+        review_task_id = find_review_task_by_name(task.id)  # backlog__task_list() → найти [REVIEW] * task.id
+
     Task(
         description=f"DEV-fix: {task.title}",
         prompt=f"""{developer_role}
 ---
 TASK_ID: {task.id}
-REVIEW_TASK_ID: {review_task.id}
+REVIEW_TASK_ID: {review_task_id}
 CURRENT_DIR: {current_dir}
 Режим MCP: BACKLOG
 
 Задача в статусе review-debug. Прочитай замечания:
-  backlog__task_get({review_task.id}) → секция "Что именно нужно исправить"
+  backlog__task_get({review_task_id}) → секция "Что именно нужно исправить"
 Исправь каждый пункт и снова переведи в code-review.
 По завершению добавить в notes: [PM-NOTIFY dev-complete TASK_ID={task.id}]
         """,
         model="claude-opus-4-5",
-        subagent_type="general-purpose"
+        subagent_type="general-purpose",
+        timeout=TIMEOUTS["DEV_FIX"]
     )
 
 # ── DEV агенты (новые задачи из todo) ──────────────────────────
@@ -1310,7 +1529,39 @@ CURRENT_DIR: {current_dir}
 По завершению добавить в notes: [PM-NOTIFY dev-complete TASK_ID={task.id}]
         """,
         model="claude-opus-4-5",
-        subagent_type="general-purpose"
+        subagent_type="general-purpose",
+        timeout=TIMEOUTS["DEV"]
+    )
+
+# ── QDEV агенты ──────────────────────────────────────────────────
+# QDEV проверяет что код РЕАЛЬНО работает перед отправкой на code review
+# 4 уровня проверки: git diff не пуст → тесты проходят → сервис запущен → артефакты на месте
+# При PASS: qdev-check → code-review
+# При FAIL: qdev-check → review-debug (возврат DEV'у на исправление)
+
+for task in qdev_check:
+    # Извлечь worktree из DEV-LOG
+    task_data = backlog__task_get(task.id)
+    worktree_path = extract_worktree(task_data.notes)   # из [DEV-LOG branch:...|worktree:...]
+    branch_name   = extract_branch(task_data.notes)
+    Task(
+        description=f"QDEV: {task.title}",
+        prompt=f"""{qdev_role}
+---
+TASK_ID: {task.id}
+Worktree: {worktree_path}
+Ветка: {branch_name}
+Режим MCP: BACKLOG
+
+Первое действие: backlog__task_get({task.id})
+Провести 4-уровневую проверку что код реально работает.
+При PASS → перевести в code-review
+При FAIL → вернуть в review-debug с конкретным описанием что не работает
+По завершению добавить в notes: [PM-NOTIFY qdev-complete TASK_ID={task.id}]
+        """,
+        model="claude-sonnet-4-5",
+        subagent_type="general-purpose",
+        timeout=TIMEOUTS["QDEV"]
     )
 
 # ── REVIEW агенты ───────────────────────────────────────────────
@@ -1330,7 +1581,8 @@ TASK_IDs: {task.id}
 По завершению добавить в notes эпика: [PM-NOTIFY review-complete EPIC_ID={epic_id}]
         """,
         model="claude-opus-4-5",
-        subagent_type="general-purpose"
+        subagent_type="general-purpose",
+        timeout=TIMEOUTS["REVIEW"]
     )
 
 # ── QA агенты ───────────────────────────────────────────────────
@@ -1352,7 +1604,8 @@ Worktree: {worktree_path}
 По завершению добавить в notes: [PM-NOTIFY qa-complete TASK_ID={task.id}]
         """,
         model="claude-sonnet-4-5",
-        subagent_type="general-purpose"
+        subagent_type="general-purpose",
+        timeout=TIMEOUTS["QA"]
     )
 ```
 
@@ -1362,7 +1615,7 @@ Worktree: {worktree_path}
 
 ```python
 # После того как все Task() в шаге D завершились:
-for task in dev_queue + fix_queue + review_queue + qa_queue:
+for task in dev_queue + fix_queue + qdev_check + review_queue + qa_queue:
     # Убрать [AGENT-ACTIVE] чтобы следующая волна могла проверить статус
     notes = backlog__task_get(task.id).notes
     updated = notes.replace("[AGENT-ACTIVE", "[AGENT-DONE")
@@ -1458,7 +1711,8 @@ FAIL → опиши баги: шаги + ожидаемое + факт
 Вердикт без реального вывода тестов не принимается.
   """,
   model="claude-sonnet-4-5",
-  subagent_type="general-purpose"
+  subagent_type="general-purpose",
+  timeout=TIMEOUTS["QA"]
 )
 ```
 
@@ -1533,7 +1787,8 @@ backlog__task_list() → финальный чек-лист:
 Реальный вывод команд обязателен.
      """,
      model="claude-sonnet-4-5",
-  subagent_type="general-purpose"
+  subagent_type="general-purpose",
+  timeout=TIMEOUTS["DEBUG"]
    )
 
 4. backlog__task_update(debug_id, status="done",
