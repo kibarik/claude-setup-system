@@ -1,6 +1,6 @@
 project_name: "my-project"
 default_status: "To Do"
-statuses: ["To Do", "In Progress", "Done"]
+statuses: ["To Do", "In Progress", "code-review", "review-debug", "ready-for-testing", "review-human-await", "Done"]
 labels: []
 date_format: yyyy-mm-dd
 max_column_width: 20
