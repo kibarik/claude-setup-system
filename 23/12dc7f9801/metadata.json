@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "2312dc7f9801",
+  "strategy": "manual-commit",
+  "branch": "pm/desert-technosaurus",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "CLAUDE.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/23/12dc7f9801/0/metadata.json",
+      "transcript": "/23/12dc7f9801/0/full.jsonl",
+      "content_hash": "/23/12dc7f9801/0/content_hash.txt",
+      "prompt": "/23/12dc7f9801/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 1
+  }
+}
