@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "2312dc7f9801",
+  "session_id": "86b86054-8f94-4286-8e6c-3985dd2531ce",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-25T10:28:50.005379Z",
+  "branch": "pm/desert-technosaurus",
+  "checkpoints_count": 7,
+  "files_touched": [
+    "BUSINESS_PROCESS_CHANGES.md",
+    "CLAUDE.md",
+    "README.md",
+    "RELEASELOG.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-6",
+  "turn_id": "4209deedb2fa",
+  "token_usage": {
+    "input_tokens": 716243,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 8085632,
+    "output_tokens": 30900,
+    "api_call_count": 96
+  },
+  "session_metrics": {
+    "turn_count": 7
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-03-25T10:28:49.63982Z",
+    "agent_lines": 715,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 715,
+    "agent_percentage": 100
+  }
+}

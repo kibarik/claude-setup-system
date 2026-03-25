@@ -3,9 +3,12 @@
   "checkpoint_id": "2312dc7f9801",
   "strategy": "manual-commit",
   "branch": "pm/desert-technosaurus",
-  "checkpoints_count": 1,
+  "checkpoints_count": 8,
   "files_touched": [
-    "CLAUDE.md"
+    "BUSINESS_PROCESS_CHANGES.md",
+    "CLAUDE.md",
+    "README.md",
+    "RELEASELOG.md"
   ],
   "sessions": [
     {
@@ -13,13 +16,19 @@
       "transcript": "/23/12dc7f9801/0/full.jsonl",
       "content_hash": "/23/12dc7f9801/0/content_hash.txt",
       "prompt": "/23/12dc7f9801/0/prompt.txt"
+    },
+    {
+      "metadata": "/23/12dc7f9801/1/metadata.json",
+      "transcript": "/23/12dc7f9801/1/full.jsonl",
+      "content_hash": "/23/12dc7f9801/1/content_hash.txt",
+      "prompt": "/23/12dc7f9801/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 0,
+    "input_tokens": 716243,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 0,
-    "output_tokens": 0,
-    "api_call_count": 1
+    "cache_read_tokens": 8085632,
+    "output_tokens": 30900,
+    "api_call_count": 97
   }
 }
