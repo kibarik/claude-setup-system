@@ -1,0 +1,5 @@
+переключись на main ветку в main репозиторий
+
+---
+
+вставь файлы из /Users/aleksishmanov/Downloads/claude-setup-v3.zip в текущую папку проекта
