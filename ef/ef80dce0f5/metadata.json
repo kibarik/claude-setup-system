@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "efef80dce0f5",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".claude/mcp.json",
+    "docs/agent-orchestration-research.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ef/ef80dce0f5/0/metadata.json",
+      "transcript": "/ef/ef80dce0f5/0/full.jsonl",
+      "content_hash": "/ef/ef80dce0f5/0/content_hash.txt",
+      "prompt": "/ef/ef80dce0f5/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 226935,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1896064,
+    "output_tokens": 13226,
+    "api_call_count": 32
+  }
+}
