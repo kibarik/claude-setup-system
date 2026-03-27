@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.5.0",
+  "checkpoint_id": "d55d0dd824b4",
+  "session_id": "498c670d-bc3b-42d6-b77a-02116cf5a6cd",
+  "strategy": "manual-commit",
+  "created_at": "2026-03-27T15:36:09.46497Z",
+  "branch": "pm-orchestrator-arch",
+  "checkpoints_count": 0,
+  "files_touched": [],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-6",
+  "turn_id": "6c1bac7b4e94",
+  "checkpoint_transcript_start": 451,
+  "transcript_lines_at_start": 451,
+  "token_usage": {
+    "input_tokens": 17131,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 2433920,
+    "output_tokens": 9414,
+    "api_call_count": 31
+  },
+  "session_metrics": {
+    "turn_count": 3
+  }
+}
