@@ -3,21 +3,29 @@
   "checkpoint_id": "d55d0dd824b4",
   "strategy": "manual-commit",
   "branch": "pm-orchestrator-arch",
-  "checkpoints_count": 0,
-  "files_touched": null,
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".claude/mcp.json"
+  ],
   "sessions": [
     {
       "metadata": "/d5/5d0dd824b4/0/metadata.json",
       "transcript": "/d5/5d0dd824b4/0/full.jsonl",
       "content_hash": "/d5/5d0dd824b4/0/content_hash.txt",
       "prompt": "/d5/5d0dd824b4/0/prompt.txt"
+    },
+    {
+      "metadata": "/d5/5d0dd824b4/1/metadata.json",
+      "transcript": "/d5/5d0dd824b4/1/full.jsonl",
+      "content_hash": "/d5/5d0dd824b4/1/content_hash.txt",
+      "prompt": "/d5/5d0dd824b4/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 17131,
+    "input_tokens": 134769,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 2433920,
-    "output_tokens": 9414,
-    "api_call_count": 31
+    "cache_read_tokens": 2979712,
+    "output_tokens": 13634,
+    "api_call_count": 44
   }
 }
