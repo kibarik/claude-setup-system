@@ -2,7 +2,7 @@
 
 ## TIMEOUT
 
-**30 минут** на полный цикл (исследование + Spec-Kitty).
+**30 минут** на полный цикл (исследование + Spec-Kitty/fallback).
 
 ---
 
@@ -19,6 +19,7 @@
 
 - Запускать Spec-Kitty сразу после чтения задачи — сначала ФАЗА 0
 - Write() файлов напрямую — только через Spec-Kitty или backlog__doc_create()
+- **Write() файлов в корневую директорию** — все файловые артефакты ТОЛЬКО в `docs/` или через backlog__doc_create()
 - Создавать подзадачи ДО завершения спецификации
 - Считать работу завершённой без финального отчёта
 - **Первый шаг — всегда: backlog__task_get(TASK_ID)**
@@ -101,10 +102,25 @@ backlog__doc_list() → найти релевантные → backlog__doc_get(d
 
 ### 0.5 Brainstorm
 
-```
-/superpowers:brainstorm
+**КРИТИЧНО: Brainstorm вызывается через Skill tool, НЕ через slash-команду.**
 
-Передать ВСЁ: описание задачи, результаты Explore, паттерны, контексты, вопросы.
+```
+Skill(
+  skill="superpowers:brainstorm",
+  args="""
+Задача: {task_description}
+
+## Результаты Explore
+{результаты 4 Explore-агентов}
+
+## Паттерны кодовой базы
+{SA-PATTERN список}
+
+## Контекст из Backlog
+{SA-CONTEXT список}
+
+## Открытые вопросы
+{SA-QUESTION список}
 
 Запросить 5 направлений:
   1. Риски реализации
@@ -112,6 +128,8 @@ backlog__doc_list() → найти релевантные → backlog__doc_get(d
   3. Скрытая сложность
   4. Зависимости
   5. Тестируемость
+  """
+)
 ```
 
 ### 0.6 Adversarial Analysis
@@ -161,81 +179,195 @@ entire checkpoint "sa-research-{TASK_ID}" 2>/dev/null || true
 
 ## ПРОВЕРКА SPEC-KITTY
 
-```
-spec-kitty agent feature check-prerequisites --json
-→ если недоступен: [SA-BLOCKED: spec-kitty unavailable] → СТОП
-```
+**КРИТИЧНО: Spec-Kitty вызывается через `Skill` tool, НЕ через Bash.**
 
-Spec-Kitty обязателен. Fallback не существует.
+```
+Проверить доступность:
+  Skill(skill="spec-kitty.status")
+    → ответил → ФАЗА 1: SPEC-KITTY
+    → ошибка/недоступен → ФАЗА 1-FALLBACK
+
+НЕ использовать Bash(ls .claude/commands/...) — это не определяет доступность Skill.
+```
 
 ---
 
 ## ФАЗА 1: SPEC-KITTY ЦИКЛ
 
-### Этап 1 — /spec-kitty.specify
+**Рабочая директория Spec-Kitty:** все артефакты (spec.md, research.md, tasks/, checklists/) сохраняются в `docs/kitty-specs/{TASK_ID}/`. Никогда не в корне проекта.
 
-Передать МАКСИМАЛЬНЫЙ контекст из исследования. Отвечать развёрнуто (не "да"/"стандартно").
+**Механизм вызова:** каждый этап — это `Skill(skill="spec-kitty.{команда}", args="...")`. Не Bash, не чтение файлов, не ручная генерация.
 
-Обязательные требования к спецификации:
+### Этап 1 — spec-kitty.specify
+
+```
+Skill(
+  skill="spec-kitty.specify",
+  args="""
+feature: {название задачи}
+task_id: {TASK_ID}
+
+## Бизнес-контекст
+{из INTAKE}
+
+## Исследование (паттерны, контексты, вопросы)
+{SA-PATTERN, SA-CONTEXT, SA-QUESTION из Фазы 0}
+
+## Brainstorm результаты
+{риски, альтернативы, скрытая сложность}
+
+## Adversarial анализ
+{gaps, security_risks, failure_modes, edge_cases}
+
+## Обязательные требования к спецификации
 - Внутренние контракты: input/output/raises для каждого компонента
 - FR покрывают: happy path, failure isolation, zero regression
 - Success Criteria ИЗМЕРИМЫ (не "качество улучшается", а "≤200ms p95")
+  """
+)
+
+Если Skill tool недоступен → [SA-BLOCKED] записать в backlog, СТОП, сообщить PM.
+```
+
+Отвечать развёрнуто (не "да"/"стандартно").
 
 ```
 entire checkpoint "sa-specify-{TASK_ID}" 2>/dev/null || true
 ```
 
-### Этап 2 — /spec-kitty.plan
+### Этап 2 — spec-kitty.plan
 
-Добавить: паттерны из кодовой базы, файлы для изменения, ограничения.
+```
+Skill(
+  skill="spec-kitty.plan",
+  args="""
+task_id: {TASK_ID}
+
+## Паттерны из кодовой базы
+{SA-PATTERN список}
+
+## Файлы для изменения
+{из Explore-агентов и Шага 0.2}
+
+## Ограничения
+{из INTAKE + Adversarial анализ}
+  """
+)
+```
 
 ```
 entire checkpoint "sa-plan-{TASK_ID}" 2>/dev/null || true
 ```
 
-### Этап 3 — /spec-kitty.checklist
+### Этап 3 — spec-kitty.checklist
 
-Убедиться что покрывает: happy path, edge cases, риски, интеграцию.
+```
+Skill(
+  skill="spec-kitty.checklist",
+  args="task_id: {TASK_ID} — убедиться что покрывает: happy path, edge cases, риски, интеграцию"
+)
+```
 
 ```
 entire checkpoint "sa-checklist-{TASK_ID}" 2>/dev/null || true
 ```
 
-### Этап 4 — /spec-kitty.task
+### Этап 4 — spec-kitty.tasks
 
-Каждая задача: выполнима за 175K токенов, PASS/FAIL критерий, ≤3 модуля.
+```
+Skill(
+  skill="spec-kitty.tasks",
+  args="task_id: {TASK_ID} — каждая задача: выполнима за 175K токенов, PASS/FAIL критерий, ≤3 модуля"
+)
+```
 
 ### Финальная проверка
 
 ```
-/spec-kitty dashboard → все 4 раздела заполнены?
-Финальный вопрос: "DEV сможет работать без уточнений?"
+Skill(skill="spec-kitty.dashboard", args="task_id: {TASK_ID}")
+  → все 4 раздела заполнены?
+  → Финальный вопрос: "DEV сможет работать без уточнений?"
 
 entire checkpoint "sa-complete-{TASK_ID}" 2>/dev/null || true
 ```
 
-### Artifact Gate
+---
 
-**Два уровня проверки (оба обязательны):**
+## ФАЗА 1-FALLBACK: БЕЗ SPEC-KITTY
 
-Уровень 1 — CLI:
-```bash
-spec-kitty agent feature check-prerequisites --json
-spec-kitty dashboard
+Spec-Kitty недоступен. Создать артефакты через backlog__doc_create().
+**Никаких Write() в файловую систему.** Всё — только в Backlog MCP.
+Шаблоны: `.claude/templates/fallback/`
+
 ```
-Убедиться: Specify ✅, Plan ✅, Tasks ✅
+spec_template = Read(".claude/templates/fallback/spec-template.md")
+plan_template = Read(".claude/templates/fallback/plan-template.md")
+checklist_template = Read(".claude/templates/fallback/checklist-template.md")
 
-Уровень 2 — Shell (FEATURE_DIR из JSON вывода check-prerequisites):
-```bash
-test -s {FEATURE_DIR}/research.md
-ls {FEATURE_DIR}/contracts/ | wc -l    # ≥1
-ls {FEATURE_DIR}/checklists/ | wc -l   # ≥1
-test -s {FEATURE_DIR}/quickstart.md
-test -s {FEATURE_DIR}/data-model.md
+Для каждого шаблона:
+  Заполнить данными из исследования
+  backlog__doc_create(title="...", content={заполненный шаблон})
 ```
 
-Если что-то не прошло → SA возвращается и создаёт недостающий артефакт.
-Если timeout → `[SA-BLOCKED: incomplete artifacts | missing: {список}]` → СТОП
+### Self-Review (для обоих режимов)
+
+```
+3 раунда:
+  РАУНД 1 — ПОЛНОТА: каждый acceptance criteria покрыт?
+  РАУНД 2 — QUALITY: однозначно? тестируемо? измеримо?
+  РАУНД 3 — ADVERSARIAL: как DEV неправильно интерпретирует?
+
+Если пробелы → вернуться и дополнить.
+
+entire checkpoint "sa-self-review-{TASK_ID}" 2>/dev/null || true
+```
+
+---
+
+## ФАЗА 2: ПЕРЕНОС В BACKLOG
+
+### Шаг A — Обновить родительскую задачу
+
+```
+backlog__task_update(TASK_ID,
+  description = original_description + """
+## Результаты аналитики
+Исследование: {research_doc_id}
+Спецификация: {spec_doc_id}
+План: {plan_doc_id}
+Чек-лист: {checklist_doc_id}
+  """,
+  notes="[SA-LOG completed | research: {research_doc_id}]"
+)
+```
+
+### Шаг A.2 — Документы в Backlog (только Spec-Kitty режим)
+
+```
+Если Spec-Kitty → сохранить spec, plan, checklist через backlog__doc_create()
+Если fallback → документы уже созданы
+```
+
+### Шаг A.3 — Решения в Backlog Decisions
+
+```
+Для каждого архитектурного решения:
+  backlog__decision_create(title, content={контекст + решение + альтернативы}, status="accepted")
+```
+
+### Шаг B — Подзадачи
+
+```
+prev_sub_id = None
+
+Для каждой задачи из Spec-Kitty/плана:
+  sub_id = backlog__task_create(
+    title="{название}",
+    description="{контекст + ТЗ + edge cases + критерий PASS/FAIL + сценарий}",
+    depends_on=[prev_sub_id] если есть
+  )
+  prev_sub_id = sub_id
+```
 
 ---
 
@@ -244,12 +376,13 @@ test -s {FEATURE_DIR}/data-model.md
 ```
 backlog__task_update(TASK_ID, notes="""
 [SA-REPORT]
-FEATURE_DIR: {абсолютный путь из check-prerequisites --json}
-Workflow: Specify ✅ | Plan ✅ | Tasks ✅
-Artifacts: research ✅ | contracts ✅ | checklists ✅ | quickstart ✅ | data-model ✅
-WP count: {N}
-Исследование: {research_doc_id в Backlog}
+Задача: {TASK_ID} — {название}
+Статус: ЗАВЕРШЕНО
+Режим: {SPEC-KITTY или FALLBACK}
+
+Исследование: {research_doc_id} | файлов: {N} | вопросов: {N} | рисков: {N}
+Артефакты: spec={spec_doc_id}, plan={plan_doc_id}, checklist={checklist_doc_id}
+Подзадачи: {N} | {список task_id}
+Беклог готов к SCRUM-мастеру.
 """)
 ```
-
-SA завершается после этого отчёта. Перенос задач в Backlog — задача Transfer Agent, не SA.
