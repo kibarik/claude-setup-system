@@ -2,7 +2,7 @@
 
 ## TIMEOUT
 
-**30 минут** на полный цикл (исследование + Spec-Kitty/fallback).
+**30 минут** на полный цикл (исследование + Spec-Kitty).
 
 ---
 
@@ -162,10 +162,11 @@ entire checkpoint "sa-research-{TASK_ID}" 2>/dev/null || true
 ## ПРОВЕРКА SPEC-KITTY
 
 ```
-Bash(ls .claude/commands/spec-kitty.*.md 2>/dev/null | wc -l)
-Если ≥ 5 → ФАЗА 1: SPEC-KITTY
-Если < 5 → ФАЗА 1-FALLBACK
+spec-kitty agent feature check-prerequisites --json
+→ если недоступен: [SA-BLOCKED: spec-kitty unavailable] → СТОП
 ```
+
+Spec-Kitty обязателен. Fallback не существует.
 
 ---
 
@@ -213,82 +214,28 @@ entire checkpoint "sa-checklist-{TASK_ID}" 2>/dev/null || true
 entire checkpoint "sa-complete-{TASK_ID}" 2>/dev/null || true
 ```
 
----
+### Artifact Gate
 
-## ФАЗА 1-FALLBACK: БЕЗ SPEC-KITTY
+**Два уровня проверки (оба обязательны):**
 
-Spec-Kitty недоступен. Создать артефакты через backlog__doc_create().
-Шаблоны: `.claude/templates/fallback/`
-
+Уровень 1 — CLI:
+```bash
+spec-kitty agent feature check-prerequisites --json
+spec-kitty dashboard
 ```
-spec_template = Read(".claude/templates/fallback/spec-template.md")
-plan_template = Read(".claude/templates/fallback/plan-template.md")
-checklist_template = Read(".claude/templates/fallback/checklist-template.md")
+Убедиться: Specify ✅, Plan ✅, Tasks ✅
 
-Для каждого шаблона:
-  Заполнить данными из исследования
-  backlog__doc_create(title="...", content={заполненный шаблон})
-```
-
-### Self-Review (для обоих режимов)
-
-```
-3 раунда:
-  РАУНД 1 — ПОЛНОТА: каждый acceptance criteria покрыт?
-  РАУНД 2 — QUALITY: однозначно? тестируемо? измеримо?
-  РАУНД 3 — ADVERSARIAL: как DEV неправильно интерпретирует?
-
-Если пробелы → вернуться и дополнить.
-
-entire checkpoint "sa-self-review-{TASK_ID}" 2>/dev/null || true
+Уровень 2 — Shell (FEATURE_DIR из JSON вывода check-prerequisites):
+```bash
+test -s {FEATURE_DIR}/research.md
+ls {FEATURE_DIR}/contracts/ | wc -l    # ≥1
+ls {FEATURE_DIR}/checklists/ | wc -l   # ≥1
+test -s {FEATURE_DIR}/quickstart.md
+test -s {FEATURE_DIR}/data-model.md
 ```
 
----
-
-## ФАЗА 2: ПЕРЕНОС В BACKLOG
-
-### Шаг A — Обновить родительскую задачу
-
-```
-backlog__task_update(TASK_ID,
-  description = original_description + """
-## Результаты аналитики
-Исследование: {research_doc_id}
-Спецификация: {spec_doc_id}
-План: {plan_doc_id}
-Чек-лист: {checklist_doc_id}
-  """,
-  notes="[SA-LOG completed | research: {research_doc_id}]"
-)
-```
-
-### Шаг A.2 — Документы в Backlog (только Spec-Kitty режим)
-
-```
-Если Spec-Kitty → сохранить spec, plan, checklist через backlog__doc_create()
-Если fallback → документы уже созданы
-```
-
-### Шаг A.3 — Решения в Backlog Decisions
-
-```
-Для каждого архитектурного решения:
-  backlog__decision_create(title, content={контекст + решение + альтернативы}, status="accepted")
-```
-
-### Шаг B — Подзадачи
-
-```
-prev_sub_id = None
-
-Для каждой задачи из Spec-Kitty/плана:
-  sub_id = backlog__task_create(
-    title="{название}",
-    description="{контекст + ТЗ + edge cases + критерий PASS/FAIL + сценарий}",
-    depends_on=[prev_sub_id] если есть
-  )
-  prev_sub_id = sub_id
-```
+Если что-то не прошло → SA возвращается и создаёт недостающий артефакт.
+Если timeout → `[SA-BLOCKED: incomplete artifacts | missing: {список}]` → СТОП
 
 ---
 
@@ -297,13 +244,12 @@ prev_sub_id = None
 ```
 backlog__task_update(TASK_ID, notes="""
 [SA-REPORT]
-Задача: {TASK_ID} — {название}
-Статус: ЗАВЕРШЕНО
-Режим: {SPEC-KITTY или FALLBACK}
-
-Исследование: {research_doc_id} | файлов: {N} | вопросов: {N} | рисков: {N}
-Артефакты: spec={spec_doc_id}, plan={plan_doc_id}, checklist={checklist_doc_id}
-Подзадачи: {N} | {список task_id}
-Беклог готов к SCRUM-мастеру.
+FEATURE_DIR: {абсолютный путь из check-prerequisites --json}
+Workflow: Specify ✅ | Plan ✅ | Tasks ✅
+Artifacts: research ✅ | contracts ✅ | checklists ✅ | quickstart ✅ | data-model ✅
+WP count: {N}
+Исследование: {research_doc_id в Backlog}
 """)
 ```
+
+SA завершается после этого отчёта. Перенос задач в Backlog — задача Transfer Agent, не SA.
